@@ -73,10 +73,15 @@ module.exports = function(options) {
 		var action = function() {
 			req(url, {timeout:10000}, function(err, res) {
 				if (!err && res.statusCode >= 500) err = new Error('invalid status-code: '+res.statusCode);
-				if (callback) return callback(err);
-				if (!err) return;
+				if (!err) {
+					if (callback) return callback(err, res);
+					return;
+				}
 				retries++;
-				if (retries > 15) return that.emit('error', new Error('could not send '+url));
+				if (retries > 15) {
+					if (callback) return callback(err);
+					return that.emit('error', new Error('could not send '+url));
+				}
 				setTimeout(action, retries*1000);
 			});
 		};
@@ -104,10 +109,10 @@ module.exports = function(options) {
 				stack.shift()(url);
 			}
 		};
-
-		request(queryURL('CreateQueue', '/', {QueueName:name}), function(err) {
+		
+		retry(request, queryURL('CreateQueue', '/', {QueueName:name}), function(err) {
 			if (err) return onresult(err);
-			request(queryURL('GetQueueUrl', '/', {QueueName:name}), function(err, res) {
+			retry(request, queryURL('GetQueueUrl', '/', {QueueName:name}), function(err, res) {
 				if (err || res.statusCode !== 200) {
 					var errMessage = res.body ? text(res.body, 'Message') : '';
 					return onresult(err || new Error('invalid status code from GetQueueUrl: '+res.statusCode +
