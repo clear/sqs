@@ -1,197 +1,237 @@
-var request = require('request');
-var crypto = require('crypto');
-var qs = require('querystring');
-var http = require('http');
-var https = require('https');
-var events = require('events')
+var request = require("request");
+var crypto = require("crypto");
+var qs = require("querystring");
+var http = require("http");
+var https = require("https");
+var events = require("events");
 
-var SIGNATURE_METHOD  = 'HmacSHA256';
-var SIGNATURE_VERSION = '2';
-var SIGNATURE_TTL = 150*1000;
-var VERSION = '2012-11-05';
-var DEFAULT_REGION = 'us-east-1';
+var SIGNATURE_METHOD = "HmacSHA256";
+var SIGNATURE_VERSION = "2";
+var SIGNATURE_TTL = 150 * 1000;
+var VERSION = "2012-11-05";
+var DEFAULT_REGION = "us-east-1";
 
-var text = function(xml, tag) {
-	var i = xml.indexOf('<'+tag+'>');
-	if (i === -1) return null;
-	i += tag.length+2;
+var text = function (xml, tag) {
+    var i = xml.indexOf("<" + tag + ">");
+    if (i === -1) return null;
+    i += tag.length + 2;
 
-	return xml.substring(i, xml.indexOf('</', i));
+    return xml.substring(i, xml.indexOf("</", i));
 };
 
-var unscape = function(xml) {
-	return xml.replace(/&quot;/g, '"').replace(/$apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+var unscape = function (xml) {
+    return xml
+        .replace(/&quot;/g, '"')
+        .replace(/$apos;/g, "'")
+        .replace(/&lt;/g, "<")
+        .replace(/&gt;/g, ">")
+        .replace(/&amp;/g, "&");
 };
 
-var range = function(num) {
-	return Array(num).join(',').split(',');
+var range = function (num) {
+    return Array(num).join(",").split(",");
 };
 
-module.exports = function(options) {
-	options = options || {};
+module.exports = function (options) {
+    options = options || {};
 
-	options.access = options.access || process.env.SQS_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID;
-	options.secret = options.secret || process.env.SQS_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY;
-	options.region = options.region || process.env.SQS_REGION || process.env.AWS_REGION || DEFAULT_REGION;
-	options.raw = options.raw || false;
-	options.proxy = options.proxy || false;
+    options.access = options.access || process.env.SQS_ACCESS_KEY || process.env.AWS_ACCESS_KEY_ID;
+    options.secret =
+        options.secret || process.env.SQS_SECRET_KEY || process.env.AWS_SECRET_ACCESS_KEY;
+    options.region =
+        options.region || process.env.SQS_REGION || process.env.AWS_REGION || DEFAULT_REGION;
+    options.raw = options.raw || false;
+    options.proxy = options.proxy || false;
 
-	if (!options.access || !options.secret) throw new Error('options.access and options.secret are required');
+    if (!options.access || !options.secret)
+        throw new Error("options.access and options.secret are required");
 
-	var queues = {};
-	var closed = false;
-	var proto = options.https ? 'https://' : 'http://';
+    var queues = {};
+    var closed = false;
+    var proto = options.https ? "https://" : "http://";
 
-	var host = 'sqs.'+options.region+'.amazonaws.com';
-	if (options.proxy) host = options.proxy;
+    var host = "sqs." + options.region + ".amazonaws.com";
+    if (options.proxy) host = options.proxy;
 
-	var namespace = options.namespace ? options.namespace+'-' : '';
+    var namespace = options.namespace ? options.namespace + "-" : "";
 
-	namespace = namespace.replace(/[^a-zA-Z0-9]/g, '-').replace(/\-+/g, '-');
+    namespace = namespace.replace(/[^a-zA-Z0-9]/g, "-").replace(/-+/g, "-");
 
-	var queryURL = function(action, path, params) {
-		params = params || {};
+    var queryURL = function (action, path, params) {
+        params = params || {};
 
-		params.Action = action;
-		params.AWSAccessKeyId = options.access;
-		params.SignatureMethod = SIGNATURE_METHOD;
-		params.SignatureVersion = SIGNATURE_VERSION;
-		params.Expires = new Date(Date.now()+SIGNATURE_TTL).toISOString();
-		params.Version = VERSION;
+        params.Action = action;
+        params.AWSAccessKeyId = options.access;
+        params.SignatureMethod = SIGNATURE_METHOD;
+        params.SignatureVersion = SIGNATURE_VERSION;
+        params.Expires = new Date(Date.now() + SIGNATURE_TTL).toISOString();
+        params.Version = VERSION;
 
-		var stringToSign = 'GET\n'+host+'\n'+path+'\n'+Object.keys(params).sort().map(function(name) {
-			return name+'='+encodeURIComponent(params[name]).replace(/[!'()]/g, escape).replace(/\*/g, '%2A');
-		}).join('&');
+        var stringToSign =
+            "GET\n" +
+            host +
+            "\n" +
+            path +
+            "\n" +
+            Object.keys(params)
+                .sort()
+                .map(function (name) {
+                    return (
+                        name +
+                        "=" +
+                        encodeURIComponent(params[name])
+                            .replace(/[!'()]/g, escape)
+                            .replace(/\*/g, "%2A")
+                    );
+                })
+                .join("&");
 
-		params.Signature = crypto.createHmac('sha256',options.secret).update(stringToSign).digest('base64');
+        params.Signature = crypto
+            .createHmac("sha256", options.secret)
+            .update(stringToSign)
+            .digest("base64");
 
-		return proto+host+path+'?'+qs.stringify(params);
-	};
+        return proto + host + path + "?" + qs.stringify(params);
+    };
 
-	var retry = function(req, url, callback) {
-		var retries = 0;
-		var action = function() {
-			req(url, {timeout:10000}, function(err, res) {
-				if (!err && res.statusCode >= 500) err = new Error('invalid status-code: '+res.statusCode);
-				if (!err) {
-					if (callback) return callback(err, res);
-					return;
-				}
-				retries++;
-				if (retries > 15) {
-					if (callback) return callback(err);
-					return that.emit('error', new Error('could not send '+url));
-				}
-				setTimeout(action, retries*1000);
-			});
-		};
+    var retry = function (req, url, callback) {
+        var retries = 0;
+        var action = function () {
+            req(url, { timeout: 10000 }, function (err, res) {
+                if (!err && res.statusCode >= 500)
+                    err = new Error("invalid status-code: " + res.statusCode);
+                if (!err) {
+                    if (callback) return callback(err, res);
+                    return;
+                }
+                retries++;
+                if (retries > 15) {
+                    if (callback) return callback(err);
+                    return that.emit("error", new Error("could not send " + url));
+                }
+                setTimeout(action, retries * 1000);
+            });
+        };
 
-		action();
-	};
+        action();
+    };
 
-	var queueURL = function(name, callback) {
-		if (queues[name]) return queues[name](callback);
+    var queueURL = function (name, callback) {
+        if (queues[name]) return queues[name](callback);
 
-		var stack = [callback];
+        var stack = [callback];
 
-		queues[name] = function(callback) {
-			stack.push(callback);
-		};
+        queues[name] = function (callback) {
+            stack.push(callback);
+        };
 
-		var onresult = function(err, url) {
-			if (err) return that.emit('error', err);
+        var onresult = function (err, url) {
+            if (err) return that.emit("error", err);
 
-			queues[name] = function(callback) {
-				callback(url);
-			};
+            queues[name] = function (callback) {
+                callback(url);
+            };
 
-			while (stack.length) {
-				stack.shift()(url);
-			}
-		};
-		
-		retry(request, queryURL('CreateQueue', '/', {QueueName:name}), function(err) {
-			if (err) return onresult(err);
-			retry(request, queryURL('GetQueueUrl', '/', {QueueName:name}), function(err, res) {
-				if (err || res.statusCode !== 200) {
-					var errMessage = res.body ? text(res.body, 'Message') : '';
-					return onresult(err || new Error('invalid status code from GetQueueUrl: '+res.statusCode +
-							(errMessage? '. '+errMessage : '') ));
-				}
-				onresult(null, '/'+text(res.body, 'QueueUrl').split('/').slice(3).join('/'));
-			});
-		});
-	};
+            while (stack.length) {
+                stack.shift()(url);
+            }
+        };
 
-	var that = new events.EventEmitter();
+        retry(request, queryURL("CreateQueue", "/", { QueueName: name }), function (err) {
+            if (err) return onresult(err);
+            retry(request, queryURL("GetQueueUrl", "/", { QueueName: name }), function (err, res) {
+                if (err || res.statusCode !== 200) {
+                    var errMessage = res.body ? text(res.body, "Message") : "";
+                    return onresult(
+                        err ||
+                            new Error(
+                                "invalid status code from GetQueueUrl: " +
+                                    res.statusCode +
+                                    (errMessage ? ". " + errMessage : ""),
+                            ),
+                    );
+                }
+                onresult(null, "/" + text(res.body, "QueueUrl").split("/").slice(3).join("/"));
+            });
+        });
+    };
 
-	that.push = function(name, message, callback) {
-		name = namespace+name;
+    var that = new events.EventEmitter();
 
-		queueURL(name, function(url) {
-			var body = options.raw ? message : JSON.stringify(message);
-			retry(request, queryURL('SendMessage', url, {MessageBody: body}), callback);
-		});
-	};
+    that.push = function (name, message, callback) {
+        name = namespace + name;
 
-	that.delete = that.del = function(name, callback) {
-		name = namespace+name;
+        queueURL(name, function (url) {
+            var body = options.raw ? message : JSON.stringify(message);
+            retry(request, queryURL("SendMessage", url, { MessageBody: body }), callback);
+        });
+    };
 
-		queueURL(name, function(url) {
-			retry(request, queryURL('DeleteQueue', url), callback);
-		});
-	};
+    that.delete = that.del = function (name, callback) {
+        name = namespace + name;
 
-	var wait = options.wait || 2000;
+        queueURL(name, function (url) {
+            retry(request, queryURL("DeleteQueue", url), callback);
+        });
+    };
 
-	that.pull = function(name, workers, onmessage) {
-		if (typeof workers === 'function') return that.pull(name, options.workers || 1, workers);
+    var wait = options.wait || 2000;
 
-		name = namespace+name;
+    that.pull = function (name, workers, onmessage) {
+        if (typeof workers === "function") return that.pull(name, options.workers || 1, workers);
 
-		var agent =  options.https ? new https.Agent({maxSockets:workers}) : new http.Agent({maxSockets:workers}); // long poll should use its own agent
-		var req = request.defaults({agent:agent});
+        name = namespace + name;
 
-		range(workers).forEach(function() {
-			var next = function() {
-				if (closed) return;
+        var agent = options.https
+            ? new https.Agent({ maxSockets: workers })
+            : new http.Agent({ maxSockets: workers }); // long poll should use its own agent
+        var req = request.defaults({ agent: agent });
 
-				queueURL(name, function(url) {
-					req(queryURL('ReceiveMessage', url, {WaitTimeSeconds:20}), function(err, res) {
-						if (err || res.statusCode !== 200) return setTimeout(next, wait);
+        range(workers).forEach(function () {
+            var next = function () {
+                if (closed) return;
 
-						var body = text(res.body, 'Body');
+                queueURL(name, function (url) {
+                    req(
+                        queryURL("ReceiveMessage", url, { WaitTimeSeconds: 20 }),
+                        function (err, res) {
+                            if (err || res.statusCode !== 200) return setTimeout(next, wait);
 
-						if (!body) return options.wait ? setTimeout(next, wait) : next();
+                            var body = text(res.body, "Body");
 
-						var receipt = text(res.body, 'ReceiptHandle');
+                            if (!body) return options.wait ? setTimeout(next, wait) : next();
 
-						try {
-              body = options.raw ? unscape(body) : JSON.parse(unscape(body));
-						} catch (err) {
-							return next();
-						}
+                            var receipt = text(res.body, "ReceiptHandle");
 
-						// Callback takes an arbitrary error and a `stop` attribute to stop
-						// polling for messages
-						onmessage(body, function(err, ctx) {
-							if (err) return next();
-							retry(request, queryURL('DeleteMessage', url, {ReceiptHandle:receipt}));
-							if (ctx && ctx.stop === true) return;
-							next();
-						});
+                            try {
+                                body = options.raw ? unscape(body) : JSON.parse(unscape(body));
+                            } catch (err) {
+                                return next();
+                            }
 
-					});
-				});
-			};
+                            // Callback takes an arbitrary error and a `stop` attribute to stop
+                            // polling for messages
+                            onmessage(body, function (err, ctx) {
+                                if (err) return next();
+                                retry(
+                                    request,
+                                    queryURL("DeleteMessage", url, { ReceiptHandle: receipt }),
+                                );
+                                if (ctx && ctx.stop === true) return;
+                                next();
+                            });
+                        },
+                    );
+                });
+            };
 
-			next();
-		});
-	};
+            next();
+        });
+    };
 
-	that.close = function() {
-		closed = true;
-	};
+    that.close = function () {
+        closed = true;
+    };
 
-	return that;
+    return that;
 };
