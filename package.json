@@ -2,7 +2,7 @@
   "name": "@clearlrs/sqs",
   "version": "2.0.3",
   "dependencies": {
-    "request": "~2.75.0"
+    "request": "~2.88.2"
   },
   "repository": "git://github.com/clear/sqs",
   "description": "Forked from mafintosh/sqs to fix unmaintained bugs – A message queue using Amazon Simple Queue Service.",
