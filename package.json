@@ -13,5 +13,16 @@
     "queue",
     "message"
   ],
-  "author": "Mathias Buus Madsen <mathiasbuus@gmail.com>"
+  "author": "Mathias Buus Madsen <mathiasbuus@gmail.com>",
+  "prettier": "@clear/prettier-config",
+  "devDependencies": {
+    "@clear/eslint-config": "^0.4.0",
+    "@clear/prettier-config": "^0.1.2",
+    "eslint": "^8.57.1",
+    "prettier": "^3.3.3"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "format": "eslint --fix ."
+  }
 }
