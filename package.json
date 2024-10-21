@@ -19,6 +19,7 @@
     "@clear/eslint-config": "^0.4.0",
     "@clear/prettier-config": "^0.1.2",
     "eslint": "^8.57.1",
+    "globals": "^15.11.0",
     "prettier": "^3.3.3"
   },
   "scripts": {
