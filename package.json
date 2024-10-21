@@ -14,11 +14,11 @@
     "message"
   ],
   "author": "Mathias Buus Madsen <mathiasbuus@gmail.com>",
-  "prettier": "@clear/prettier-config",
+  "prettier": "@clear/style/prettier",
   "devDependencies": {
-    "@clear/eslint-config": "^0.4.0",
-    "@clear/prettier-config": "^0.1.2",
-    "eslint": "^8.57.1",
+    "@clear/style": "^0.3.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.11.0",
     "prettier": "^3.3.3"
   },
   "scripts": {

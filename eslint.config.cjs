@@ -1,4 +1,4 @@
-const clearConfig = require("@clear/eslint-config/js");
+const clearConfig = require("@clear/style/eslint/js");
 const globals = require("globals");
 
 module.exports = [
